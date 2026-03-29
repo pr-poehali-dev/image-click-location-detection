@@ -55,6 +55,55 @@ export default function Index() {
     setMapReady(true);
   }, []);
 
+  const getLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setError('Геолокация не поддерживается браузером');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const record: LocationRecord = {
+          id: Date.now().toString(),
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: Math.round(pos.coords.accuracy),
+          altitude: pos.coords.altitude,
+          timestamp: new Date(),
+        };
+        setLocation(record);
+        setHistory((prev) => [record, ...prev].slice(0, 20));
+        setLoading(false);
+        fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: record.lat, lng: record.lng, accuracy: record.accuracy, altitude: record.altitude }),
+        })
+          .then((r) => r.json())
+          .then((saved) => {
+            if (saved.id) {
+              setHistory((prev) =>
+                prev.map((r) => (r.id === record.id ? { ...r, id: saved.id } : r))
+              );
+            }
+          })
+          .catch(() => {});
+      },
+      (err) => {
+        setLoading(false);
+        switch (err.code) {
+          case 1: setError('Доступ к геолокации запрещён'); break;
+          case 2: setError('Невозможно определить местоположение'); break;
+          case 3: setError('Превышено время ожидания'); break;
+          default: setError('Неизвестная ошибка');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }, []);
+
   useEffect(() => {
     const checkLeaflet = setInterval(() => {
       if (window.L) {
@@ -67,8 +116,7 @@ export default function Index() {
 
   useEffect(() => {
     getLocation();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getLocation]);
 
   useEffect(() => {
     if (tracking) {
@@ -88,7 +136,9 @@ export default function Index() {
       .then((r) => r.json())
       .then((data) => {
         if (data.locations?.length) {
-          const records: LocationRecord[] = data.locations.map((l: { id: string; lat: number; lng: number; accuracy: number; altitude: number | null; timestamp: string }) => ({
+          const records: LocationRecord[] = data.locations.map((l: {
+            id: string; lat: number; lng: number; accuracy: number; altitude: number | null; timestamp: string;
+          }) => ({
             id: l.id,
             lat: l.lat,
             lng: l.lng,
@@ -128,56 +178,6 @@ export default function Index() {
 
     map.flyTo([location.lat, location.lng], Math.max(15, map.getZoom()), { duration: 1.2 });
   }, [location, mapReady]);
-
-  const getLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setError('Геолокация не поддерживается браузером');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const record: LocationRecord = {
-          id: Date.now().toString(),
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: Math.round(pos.coords.accuracy),
-          altitude: pos.coords.altitude,
-          timestamp: new Date(),
-        };
-        setLocation(record);
-        setHistory((prev) => [record, ...prev].slice(0, 20));
-        setLoading(false);
-        setActiveTab('map');
-        fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lat: record.lat, lng: record.lng, accuracy: record.accuracy, altitude: record.altitude }),
-        })
-          .then((r) => r.json())
-          .then((saved) => {
-            if (saved.id) {
-              setHistory((prev) =>
-                prev.map((r) => (r.id === record.id ? { ...r, id: saved.id } : r))
-              );
-            }
-          })
-          .catch(() => {});
-      },
-      (err) => {
-        setLoading(false);
-        switch (err.code) {
-          case 1: setError('Доступ к геолокации запрещён'); break;
-          case 2: setError('Невозможно определить местоположение'); break;
-          case 3: setError('Превышено время ожидания'); break;
-          default: setError('Неизвестная ошибка');
-        }
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
-  }, []);
 
   const formatCoord = (val: number, isLat: boolean) => {
     const abs = Math.abs(val);
@@ -389,10 +389,10 @@ export default function Index() {
                   </span>
                   <button
                     onClick={() => {
-                    fetch(API_URL, { method: 'DELETE' }).catch(() => {});
-                    setHistory([]);
-                    setLocation(null);
-                  }}
+                      fetch(API_URL, { method: 'DELETE' }).catch(() => {});
+                      setHistory([]);
+                      setLocation(null);
+                    }}
                     className="text-xs transition-colors duration-200"
                     style={{ color: 'var(--app-text-muted)' }}
                   >

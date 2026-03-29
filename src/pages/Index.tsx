@@ -11,8 +11,7 @@ export default function Index() {
   const [history, setHistory] = useState<LocationRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tracking, setTracking] = useState(true);
-  const [locMethod, setLocMethod] = useState<'ip' | 'gps'>('ip');
+  const [tracking, setTracking] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const saveRecord = useCallback((record: LocationRecord) => {
@@ -30,34 +29,6 @@ export default function Index() {
       .catch(() => {});
   }, []);
 
-  const getLocationByIp = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    setLocMethod('ip');
-
-    fetch(`${API_URL}?ip=1`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.lat) throw new Error('IP lookup failed');
-        const record: LocationRecord = {
-          id: Date.now().toString(),
-          lat: data.lat,
-          lng: data.lon,
-          accuracy: 5000,
-          altitude: null,
-          timestamp: new Date(),
-        };
-        setLocation(record);
-        setHistory((prev) => [record, ...prev].slice(0, 20));
-        setLoading(false);
-        saveRecord(record);
-      })
-      .catch(() => {
-        setLoading(false);
-        setError('Не удалось определить по IP');
-      });
-  }, [saveRecord]);
-
   const getLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setError('Геолокация не поддерживается браузером');
@@ -65,7 +36,6 @@ export default function Index() {
     }
     setLoading(true);
     setError(null);
-    setLocMethod('gps');
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -96,13 +66,13 @@ export default function Index() {
   }, [saveRecord]);
 
   useEffect(() => {
-    getLocationByIp();
-  }, [getLocationByIp]);
+    getLocation();
+  }, [getLocation]);
 
   useEffect(() => {
     if (tracking) {
       intervalRef.current = setInterval(() => {
-        getLocationByIp();
+        getLocation();
       }, 5000);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -110,7 +80,7 @@ export default function Index() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [tracking, getLocationByIp]);
+  }, [tracking, getLocation]);
 
   useEffect(() => {
     fetch(API_URL)
@@ -169,7 +139,7 @@ export default function Index() {
                 style={{ background: tracking ? 'var(--app-green)' : 'var(--app-text-muted)' }}
               />
               <span className="text-xs" style={{ color: 'var(--app-text-muted)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                {locMethod === 'ip' ? '~город' : `±${location.accuracy}м`}
+                ±{location.accuracy}м
               </span>
             </div>
           )}
@@ -184,7 +154,7 @@ export default function Index() {
             }}
           >
             <Icon name={tracking ? 'Pause' : 'Play'} size={11} />
-            {tracking ? '5с' : 'стоп'}
+            {tracking ? '5с' : 'авто'}
           </button>
         </div>
       </header>
@@ -216,7 +186,7 @@ export default function Index() {
         <MapView location={location} loading={loading} activeMap={activeTab === 'map'} />
 
         {activeTab === 'coords' && (
-          <CoordsTab location={location} locMethod={locMethod} />
+          <CoordsTab location={location} locMethod="gps" />
         )}
 
         {activeTab === 'history' && (
@@ -243,60 +213,31 @@ export default function Index() {
         </div>
       )}
 
-      {/* Buttons */}
-      <div className="px-4 pb-5 shrink-0 flex flex-col gap-2">
-        {location && (
-          <div className="flex items-center justify-center gap-2">
-            <span
-              className="text-xs px-2 py-0.5 rounded"
-              style={{
-                background: locMethod === 'ip' ? 'rgba(90,99,112,0.2)' : 'rgba(0,212,255,0.1)',
-                color: locMethod === 'ip' ? 'var(--app-text-muted)' : 'var(--app-accent)',
-                fontFamily: "'IBM Plex Mono', monospace",
-                border: locMethod === 'ip' ? '1px solid var(--app-border)' : '1px solid rgba(0,212,255,0.3)',
-              }}
-            >
-              {locMethod === 'ip' ? '📡 IP · ~город' : '🛰 GPS · высокая точность'}
-            </span>
-          </div>
-        )}
-        <div className="flex gap-2">
-          <button
-            onClick={getLocationByIp}
-            disabled={loading}
-            className="flex-1 py-3.5 rounded flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
-            style={{
-              background: 'var(--app-surface-2)',
-              border: '1px solid var(--app-border)',
-              color: 'var(--app-text-muted)',
-              fontFamily: "'IBM Plex Mono', monospace",
-            }}
-          >
-            {loading && locMethod === 'ip' ? (
-              <Icon name="Loader" size={15} className="animate-spin" />
-            ) : (
-              <Icon name="Globe" size={15} />
-            )}
-            По IP
-          </button>
-          <button
-            onClick={getLocation}
-            disabled={loading}
-            className="flex-1 py-3.5 rounded flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
-            style={{
-              background: loading && locMethod === 'gps' ? 'var(--app-surface-2)' : 'var(--app-accent)',
-              color: loading && locMethod === 'gps' ? 'var(--app-text-muted)' : '#000',
-              fontFamily: "'IBM Plex Mono', monospace",
-            }}
-          >
-            {loading && locMethod === 'gps' ? (
-              <Icon name="Loader" size={15} className="animate-spin" />
-            ) : (
-              <Icon name="Locate" size={15} />
-            )}
-            GPS
-          </button>
-        </div>
+      {/* Button */}
+      <div className="px-4 pb-5 shrink-0">
+        <button
+          onClick={getLocation}
+          disabled={loading}
+          className="w-full py-4 rounded flex items-center justify-center gap-3 text-sm font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            background: loading ? 'var(--app-surface-2)' : 'var(--app-accent)',
+            color: loading ? 'var(--app-text-muted)' : '#000',
+            fontFamily: "'IBM Plex Mono', monospace",
+            letterSpacing: '0.05em',
+          }}
+        >
+          {loading ? (
+            <>
+              <Icon name="Loader" size={16} className="animate-spin" />
+              Определяю...
+            </>
+          ) : (
+            <>
+              <Icon name="Locate" size={16} />
+              {location ? 'Обновить координаты' : 'Определить местоположение'}
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

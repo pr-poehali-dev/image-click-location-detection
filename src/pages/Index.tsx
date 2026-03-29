@@ -29,6 +29,7 @@ export default function Index() {
   const [error, setError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [tracking, setTracking] = useState(true);
+  const [locMethod, setLocMethod] = useState<'ip' | 'gps'>('ip');
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const mapRef = useRef<HTMLDivElement>(null);
@@ -55,6 +56,49 @@ export default function Index() {
     setMapReady(true);
   }, []);
 
+  const saveRecord = useCallback((record: LocationRecord) => {
+    fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: record.lat, lng: record.lng, accuracy: record.accuracy, altitude: record.altitude }),
+    })
+      .then((r) => r.json())
+      .then((saved) => {
+        if (saved.id) {
+          setHistory((prev) => prev.map((r) => (r.id === record.id ? { ...r, id: saved.id } : r)));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const getLocationByIp = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setLocMethod('ip');
+
+    fetch('https://ip-api.com/json/?fields=status,lat,lon,city,country,regionName')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.status !== 'success') throw new Error('IP lookup failed');
+        const record: LocationRecord = {
+          id: Date.now().toString(),
+          lat: data.lat,
+          lng: data.lon,
+          accuracy: 5000,
+          altitude: null,
+          timestamp: new Date(),
+        };
+        setLocation(record);
+        setHistory((prev) => [record, ...prev].slice(0, 20));
+        setLoading(false);
+        saveRecord(record);
+      })
+      .catch(() => {
+        setLoading(false);
+        setError('Не удалось определить по IP');
+      });
+  }, [saveRecord]);
+
   const getLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setError('Геолокация не поддерживается браузером');
@@ -62,6 +106,7 @@ export default function Index() {
     }
     setLoading(true);
     setError(null);
+    setLocMethod('gps');
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -76,20 +121,7 @@ export default function Index() {
         setLocation(record);
         setHistory((prev) => [record, ...prev].slice(0, 20));
         setLoading(false);
-        fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lat: record.lat, lng: record.lng, accuracy: record.accuracy, altitude: record.altitude }),
-        })
-          .then((r) => r.json())
-          .then((saved) => {
-            if (saved.id) {
-              setHistory((prev) =>
-                prev.map((r) => (r.id === record.id ? { ...r, id: saved.id } : r))
-              );
-            }
-          })
-          .catch(() => {});
+        saveRecord(record);
       },
       (err) => {
         setLoading(false);
@@ -102,7 +134,7 @@ export default function Index() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
-  }, []);
+  }, [saveRecord]);
 
   useEffect(() => {
     const checkLeaflet = setInterval(() => {
@@ -115,13 +147,13 @@ export default function Index() {
   }, [initMap]);
 
   useEffect(() => {
-    getLocation();
-  }, [getLocation]);
+    getLocationByIp();
+  }, [getLocationByIp]);
 
   useEffect(() => {
     if (tracking) {
       intervalRef.current = setInterval(() => {
-        getLocation();
+        getLocationByIp();
       }, 5000);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -129,7 +161,7 @@ export default function Index() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [tracking, getLocation]);
+  }, [tracking, getLocationByIp]);
 
   useEffect(() => {
     fetch(API_URL)
@@ -231,7 +263,7 @@ export default function Index() {
                 style={{ background: tracking ? 'var(--app-green)' : 'var(--app-text-muted)' }}
               />
               <span className="text-xs" style={{ color: 'var(--app-text-muted)', fontFamily: "'IBM Plex Mono', monospace" }}>
-                ±{location.accuracy}м
+                {locMethod === 'ip' ? '~город' : `±${location.accuracy}м`}
               </span>
             </div>
           )}
@@ -329,7 +361,7 @@ export default function Index() {
                 {[
                   { label: 'ШИРОТА', value: location.lat.toFixed(8), sub: formatCoord(location.lat, true), icon: 'ArrowUpDown' },
                   { label: 'ДОЛГОТА', value: location.lng.toFixed(8), sub: formatCoord(location.lng, false), icon: 'ArrowLeftRight' },
-                  { label: 'ТОЧНОСТЬ', value: `±${location.accuracy} м`, sub: location.accuracy < 10 ? 'Высокая точность GPS' : location.accuracy < 50 ? 'Средняя точность' : 'Низкая точность', icon: 'Target' },
+                  { label: 'ТОЧНОСТЬ', value: locMethod === 'ip' ? '~5 км' : `±${location.accuracy} м`, sub: locMethod === 'ip' ? 'По IP-адресу · уровень города' : location.accuracy < 10 ? 'Высокая точность GPS' : location.accuracy < 50 ? 'Средняя точность GPS' : 'Низкая точность GPS', icon: 'Target' },
                   ...(location.altitude !== null ? [{ label: 'ВЫСОТА', value: `${Math.round(location.altitude ?? 0)} м`, sub: 'над уровнем моря', icon: 'Mountain' }] : []),
                   { label: 'ВРЕМЯ ФИКСАЦИИ', value: formatTime(location.timestamp), sub: formatDate(location.timestamp), icon: 'Clock' },
                 ].map((item, i) => (
@@ -461,31 +493,61 @@ export default function Index() {
         </div>
       )}
 
-      {/* Main CTA button */}
-      <div className="px-4 pb-5 shrink-0">
-        <button
-          onClick={getLocation}
-          disabled={loading}
-          className="w-full py-4 rounded flex items-center justify-center gap-3 text-sm font-medium transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            background: loading ? 'var(--app-surface-2)' : 'var(--app-accent)',
-            color: loading ? 'var(--app-text-muted)' : '#000',
-            fontFamily: "'IBM Plex Mono', monospace",
-            letterSpacing: '0.05em',
-          }}
-        >
-          {loading ? (
-            <>
-              <Icon name="Loader" size={16} className="animate-spin" />
-              Определяю...
-            </>
-          ) : (
-            <>
-              <Icon name="Locate" size={16} />
-              {location ? 'Обновить координаты' : 'Определить местоположение'}
-            </>
-          )}
-        </button>
+      {/* Buttons */}
+      <div className="px-4 pb-5 shrink-0 flex flex-col gap-2">
+        {/* IP badge */}
+        {location && (
+          <div className="flex items-center justify-center gap-2">
+            <span
+              className="text-xs px-2 py-0.5 rounded"
+              style={{
+                background: locMethod === 'ip' ? 'rgba(90,99,112,0.2)' : 'rgba(0,212,255,0.1)',
+                color: locMethod === 'ip' ? 'var(--app-text-muted)' : 'var(--app-accent)',
+                fontFamily: "'IBM Plex Mono', monospace",
+                border: locMethod === 'ip' ? '1px solid var(--app-border)' : '1px solid rgba(0,212,255,0.3)',
+              }}
+            >
+              {locMethod === 'ip' ? '📡 IP · ~город' : '🛰 GPS · высокая точность'}
+            </span>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={getLocationByIp}
+            disabled={loading}
+            className="flex-1 py-3.5 rounded flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
+            style={{
+              background: 'var(--app-surface-2)',
+              border: '1px solid var(--app-border)',
+              color: 'var(--app-text-muted)',
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            {loading && locMethod === 'ip' ? (
+              <Icon name="Loader" size={15} className="animate-spin" />
+            ) : (
+              <Icon name="Globe" size={15} />
+            )}
+            По IP
+          </button>
+          <button
+            onClick={getLocation}
+            disabled={loading}
+            className="flex-1 py-3.5 rounded flex items-center justify-center gap-2 text-sm font-medium transition-all duration-200 active:scale-95 disabled:opacity-50"
+            style={{
+              background: loading && locMethod === 'gps' ? 'var(--app-surface-2)' : 'var(--app-accent)',
+              color: loading && locMethod === 'gps' ? 'var(--app-text-muted)' : '#000',
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            {loading && locMethod === 'gps' ? (
+              <Icon name="Loader" size={15} className="animate-spin" />
+            ) : (
+              <Icon name="Locate" size={15} />
+            )}
+            GPS
+          </button>
+        </div>
       </div>
     </div>
   );

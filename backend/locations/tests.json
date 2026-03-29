@@ -11,7 +11,7 @@
     {
       "name": "GET ip geolocation",
       "method": "GET",
-      "path": "/ip",
+      "path": "/?ip=1",
       "expectedStatus": 200,
       "expectedBody": {"lat": 0},
       "bodyMatcher": "partial"

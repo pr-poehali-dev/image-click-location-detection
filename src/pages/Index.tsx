@@ -35,7 +35,7 @@ export default function Index() {
     setError(null);
     setLocMethod('ip');
 
-    fetch(`${API_URL}/ip`)
+    fetch(`${API_URL}?ip=1`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.lat) throw new Error('IP lookup failed');

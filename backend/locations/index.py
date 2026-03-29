@@ -16,10 +16,10 @@ def handler(event: dict, context) -> dict:
         return {'statusCode': 200, 'headers': cors_headers, 'body': ''}
 
     method = event.get('httpMethod', 'GET')
-    path = event.get('path', '/')
+    params = event.get('queryStringParameters') or {}
 
-    # IP геолокация — GET /ip
-    if method == 'GET' and path.endswith('/ip'):
+    # IP геолокация — GET ?ip=1
+    if method == 'GET' and 'ip' in params:
         ip = event.get('requestContext', {}).get('identity', {}).get('sourceIp', '')
         url = f'http://ip-api.com/json/{ip}?fields=status,lat,lon,city,regionName,country'
         with urllib.request.urlopen(url, timeout=5) as resp:

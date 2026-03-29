@@ -19,6 +19,8 @@ declare global {
   }
 }
 
+const API_URL = 'https://functions.poehali.dev/a66bf5af-8f3c-4db6-86e4-c657b0011f0c';
+
 export default function Index() {
   const [activeTab, setActiveTab] = useState<TabType>('map');
   const [location, setLocation] = useState<LocationRecord | null>(null);
@@ -60,6 +62,25 @@ export default function Index() {
     }, 100);
     return () => clearInterval(checkLeaflet);
   }, [initMap]);
+
+  useEffect(() => {
+    fetch(API_URL)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.locations?.length) {
+          const records: LocationRecord[] = data.locations.map((l: { id: string; lat: number; lng: number; accuracy: number; altitude: number | null; timestamp: string }) => ({
+            id: l.id,
+            lat: l.lat,
+            lng: l.lng,
+            accuracy: l.accuracy,
+            altitude: l.altitude,
+            timestamp: new Date(l.timestamp),
+          }));
+          setHistory(records);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!mapReady || !location || !mapInstanceRef.current) return;
@@ -110,6 +131,20 @@ export default function Index() {
         setHistory((prev) => [record, ...prev].slice(0, 20));
         setLoading(false);
         setActiveTab('map');
+        fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat: record.lat, lng: record.lng, accuracy: record.accuracy, altitude: record.altitude }),
+        })
+          .then((r) => r.json())
+          .then((saved) => {
+            if (saved.id) {
+              setHistory((prev) =>
+                prev.map((r) => (r.id === record.id ? { ...r, id: saved.id } : r))
+              );
+            }
+          })
+          .catch(() => {});
       },
       (err) => {
         setLoading(false);
@@ -315,7 +350,11 @@ export default function Index() {
                     Записей: {history.length}
                   </span>
                   <button
-                    onClick={() => setHistory([])}
+                    onClick={() => {
+                    fetch(API_URL, { method: 'DELETE' }).catch(() => {});
+                    setHistory([]);
+                    setLocation(null);
+                  }}
                     className="text-xs transition-colors duration-200"
                     style={{ color: 'var(--app-text-muted)' }}
                   >

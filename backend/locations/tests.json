@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "GET locations",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {"locations": []},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "POST location",
+      "method": "POST",
+      "path": "/",
+      "body": {"lat": 55.7558, "lng": 37.6176, "accuracy": 5, "altitude": null},
+      "expectedStatus": 200,
+      "expectedBody": {"id": "string"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

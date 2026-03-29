@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS locations (
+  id BIGSERIAL PRIMARY KEY,
+  lat DOUBLE PRECISION NOT NULL,
+  lng DOUBLE PRECISION NOT NULL,
+  accuracy INTEGER NOT NULL,
+  altitude DOUBLE PRECISION,
+  recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_locations_recorded_at ON locations (recorded_at DESC);

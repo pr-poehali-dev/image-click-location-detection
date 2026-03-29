@@ -28,6 +28,8 @@ export default function Index() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [tracking, setTracking] = useState(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -65,8 +67,21 @@ export default function Index() {
 
   useEffect(() => {
     getLocation();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (tracking) {
+      intervalRef.current = setInterval(() => {
+        getLocation();
+      }, 5000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [tracking, getLocation]);
 
   useEffect(() => {
     fetch(API_URL)
@@ -208,14 +223,32 @@ export default function Index() {
             GeoPoint
           </span>
         </div>
-        {location && (
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full animate-blink" style={{ background: 'var(--app-green)' }} />
-            <span className="text-xs" style={{ color: 'var(--app-text-muted)', fontFamily: "'IBM Plex Mono', monospace" }}>
-              ±{location.accuracy}м
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {location && (
+            <div className="flex items-center gap-2">
+              <div
+                className={tracking ? 'w-1.5 h-1.5 rounded-full animate-blink' : 'w-1.5 h-1.5 rounded-full'}
+                style={{ background: tracking ? 'var(--app-green)' : 'var(--app-text-muted)' }}
+              />
+              <span className="text-xs" style={{ color: 'var(--app-text-muted)', fontFamily: "'IBM Plex Mono', monospace" }}>
+                ±{location.accuracy}м
+              </span>
+            </div>
+          )}
+          <button
+            onClick={() => setTracking((v) => !v)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-all duration-200"
+            style={{
+              background: tracking ? 'rgba(0,255,136,0.1)' : 'rgba(90,99,112,0.15)',
+              border: tracking ? '1px solid rgba(0,255,136,0.3)' : '1px solid var(--app-border)',
+              color: tracking ? 'var(--app-green)' : 'var(--app-text-muted)',
+              fontFamily: "'IBM Plex Mono', monospace",
+            }}
+          >
+            <Icon name={tracking ? 'Pause' : 'Play'} size={11} />
+            {tracking ? '5с' : 'стоп'}
+          </button>
+        </div>
       </header>
 
       {/* Tabs */}

@@ -35,10 +35,10 @@ export default function Index() {
     setError(null);
     setLocMethod('ip');
 
-    fetch('https://ip-api.com/json/?fields=status,lat,lon,city,country,regionName')
+    fetch(`${API_URL}/ip`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.status !== 'success') throw new Error('IP lookup failed');
+        if (!data.lat) throw new Error('IP lookup failed');
         const record: LocationRecord = {
           id: Date.now().toString(),
           lat: data.lat,

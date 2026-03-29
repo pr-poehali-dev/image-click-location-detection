@@ -9,6 +9,14 @@
       "bodyMatcher": "partial"
     },
     {
+      "name": "GET ip geolocation",
+      "method": "GET",
+      "path": "/ip",
+      "expectedStatus": 200,
+      "expectedBody": {"lat": 0},
+      "bodyMatcher": "partial"
+    },
+    {
       "name": "POST location",
       "method": "POST",
       "path": "/",

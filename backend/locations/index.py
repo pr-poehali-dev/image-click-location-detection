@@ -1,9 +1,10 @@
 import json
 import os
 import psycopg2
+import urllib.request
 
 def handler(event: dict, context) -> dict:
-    """Сохранение и получение истории геолокаций из базы данных."""
+    """Сохранение, получение истории геолокаций и определение по IP."""
 
     cors_headers = {
         'Access-Control-Allow-Origin': '*',
@@ -14,9 +15,35 @@ def handler(event: dict, context) -> dict:
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': cors_headers, 'body': ''}
 
+    method = event.get('httpMethod', 'GET')
+    path = event.get('path', '/')
+
+    # IP геолокация — GET /ip
+    if method == 'GET' and path.endswith('/ip'):
+        ip = event.get('requestContext', {}).get('identity', {}).get('sourceIp', '')
+        url = f'http://ip-api.com/json/{ip}?fields=status,lat,lon,city,regionName,country'
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read().decode())
+        if data.get('status') != 'success':
+            return {
+                'statusCode': 502,
+                'headers': {**cors_headers, 'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'IP lookup failed'}),
+            }
+        return {
+            'statusCode': 200,
+            'headers': {**cors_headers, 'Content-Type': 'application/json'},
+            'body': json.dumps({
+                'lat': data['lat'],
+                'lon': data['lon'],
+                'city': data.get('city', ''),
+                'region': data.get('regionName', ''),
+                'country': data.get('country', ''),
+            }),
+        }
+
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
     cur = conn.cursor()
-    method = event.get('httpMethod', 'GET')
 
     try:
         if method == 'GET':

@@ -64,6 +64,11 @@ export default function Index() {
   }, [initMap]);
 
   useEffect(() => {
+    getLocation();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     fetch(API_URL)
       .then((r) => r.json())
       .then((data) => {
